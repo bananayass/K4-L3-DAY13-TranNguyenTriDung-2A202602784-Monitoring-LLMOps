@@ -1,0 +1,132 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>LLM Operations Dashboard</title>
+  <style>
+    :root { --bg:#0c141a; --panel:#132129; --panel-2:#172a33; --line:#29404a; --ink:#e7f0ef; --muted:#92a7aa; --teal:#42c5ad; --amber:#e5a54b; --red:#ee7667; --blue:#78a9d7; }
+    * { box-sizing:border-box; }
+    body { margin:0; min-width:320px; background:radial-gradient(circle at 90% -15%, #1c3840 0, transparent 30rem), var(--bg); color:var(--ink); font-family:"IBM Plex Sans", "Segoe UI", sans-serif; }
+    body::before { content:""; position:fixed; inset:0; opacity:.12; pointer-events:none; background-image:linear-gradient(rgba(255,255,255,.035) 1px, transparent 1px),linear-gradient(90deg, rgba(255,255,255,.025) 1px, transparent 1px); background-size:28px 28px; }
+    button, input { font:inherit; }
+    .shell { position:relative; max-width:1480px; margin:0 auto; padding:28px clamp(18px,4vw,58px) 44px; }
+    header { display:flex; align-items:flex-start; justify-content:space-between; gap:24px; border-bottom:1px solid var(--line); padding-bottom:22px; }
+    .eyebrow { color:var(--teal); font:700 11px/1.2 ui-monospace, SFMono-Regular, Menlo, monospace; letter-spacing:.14em; text-transform:uppercase; }
+    h1 { margin:8px 0 7px; font:650 clamp(28px,3.5vw,44px)/1.05 Georgia, "Times New Roman", serif; letter-spacing:-.035em; }
+    .subtitle { margin:0; color:var(--muted); max-width:650px; font-size:14px; }
+    .controls { display:flex; align-items:center; justify-content:flex-end; flex-wrap:wrap; gap:9px; }
+    .threshold-control { display:inline-flex; align-items:center; gap:7px; color:var(--muted); font-size:11px; }
+    .threshold-control input { width:76px; min-height:38px; padding:0 8px; border:1px solid var(--line); border-radius:5px; background:#101d24; color:var(--ink); }
+    .file-label, button { display:inline-flex; align-items:center; gap:8px; min-height:38px; padding:0 13px; border:1px solid var(--line); border-radius:5px; background:#192b34; color:var(--ink); cursor:pointer; font-size:13px; font-weight:650; }
+    .file-label { background:var(--teal); border-color:var(--teal); color:#08201e; }
+    .file-label:hover { background:#5ad4bf; } button:hover { border-color:#5f818a; background:#203741; }
+    input[type=file] { display:none; }
+    .statusbar { display:flex; flex-wrap:wrap; gap:8px 20px; align-items:center; padding:14px 0; font:12px/1.35 ui-monospace, SFMono-Regular, Menlo, monospace; color:var(--muted); }
+    .dot { width:8px; height:8px; display:inline-block; border-radius:50%; background:var(--amber); box-shadow:0 0 12px currentColor; } .dot.ok { background:var(--teal); color:var(--teal); }
+    .grid { display:grid; grid-template-columns:repeat(12, minmax(0,1fr)); gap:14px; }
+    .panel { grid-column:span 4; min-height:218px; display:flex; flex-direction:column; padding:18px; overflow:hidden; border:1px solid var(--line); border-radius:8px; background:linear-gradient(135deg, rgba(27,48,57,.96), rgba(18,31,39,.96)); box-shadow:0 18px 42px rgba(0,0,0,.13); }
+    .panel.wide { grid-column:span 8; } .panel.tall { min-height:252px; }
+    .panel-head { display:flex; justify-content:space-between; align-items:flex-start; gap:12px; }
+    .panel-title { margin:0; font-size:13px; color:#c4d4d4; font-weight:750; letter-spacing:.02em; }
+    .unit, .badge { font:11px/1 ui-monospace, SFMono-Regular, Menlo, monospace; color:var(--muted); }
+    .badge { border:1px solid #3b5960; border-radius:99px; padding:5px 7px; white-space:nowrap; } .badge.good { color:var(--teal); border-color:rgba(66,197,173,.45); } .badge.warn { color:var(--amber); border-color:rgba(229,165,75,.5); }
+    .value { margin:24px 0 3px; font:650 36px/1 Georgia, "Times New Roman", serif; letter-spacing:-.04em; } .value small { font:600 14px/1 sans-serif; letter-spacing:0; color:var(--muted); }
+    .metric-note { color:var(--muted); font-size:12px; min-height:18px; }
+    .chart { width:100%; height:72px; margin-top:auto; padding-top:15px; } .chart svg { width:100%; height:100%; overflow:visible; }
+    .footer-line { display:flex; justify-content:space-between; gap:8px; padding-top:9px; color:var(--muted); font:10px/1.25 ui-monospace, SFMono-Regular, Menlo, monospace; }
+    .empty { grid-column:1/-1; min-height:330px; display:grid; place-items:center; text-align:center; border:1px dashed #49636b; border-radius:8px; background:rgba(21,39,47,.5); color:var(--muted); }
+    .empty strong { display:block; margin-bottom:7px; color:var(--ink); font-size:17px; }
+    .ledger { margin:16px 0 0; border-top:1px solid var(--line); padding-top:16px; display:grid; grid-template-columns:1.5fr repeat(3,1fr); gap:10px; font-size:12px; }
+    .ledger span { color:var(--muted); } .ledger b { display:block; margin-top:3px; color:var(--ink); font:700 13px ui-monospace, SFMono-Regular, Menlo, monospace; }
+    .note { margin:22px 0 0; color:var(--muted); font-size:12px; } code { color:#b9cfcd; }
+    @media (max-width:900px) { .panel, .panel.wide { grid-column:span 6; } header { flex-direction:column; } .controls { justify-content:flex-start; } }
+    @media (max-width:610px) { .shell { padding:22px 15px 35px; } .panel, .panel.wide { grid-column:1/-1; } .ledger { grid-template-columns:repeat(2,1fr); } }
+    @media print { body { background:#fff; color:#111; } body::before,.controls,.note { display:none; } .panel { box-shadow:none; background:#fff; border-color:#aaa; } .subtitle,.metric-note,.footer-line,.statusbar,.unit,.badge { color:#465; } .value,.panel-title { color:#111; } .shell { max-width:none; padding:20px; } }
+  </style>
+</head>
+<body>
+  <main class="shell">
+    <header>
+      <div>
+        <div class="eyebrow">DAY 13 / LLMOps telemetry</div>
+        <h1>Operations signal board</h1>
+        <p class="subtitle">A local, read-only view of structured application logs. Values are calculated in your browser; no log data is uploaded anywhere.</p>
+      </div>
+      <div class="controls">
+        <label class="file-label" for="logFile">Choose data/logs.jsonl</label>
+        <input id="logFile" type="file" accept=".jsonl,.log,.txt,application/json" />
+        <label class="threshold-control">Latency alert threshold <input id="latencyThreshold" type="number" min="1" value="3000" /> ms</label>
+        <button id="reload" type="button" disabled>Reload</button>
+        <button type="button" onclick="window.print()">Print / save PDF</button>
+      </div>
+    </header>
+    <div class="statusbar"><span><i id="statusDot" class="dot"></i> <span id="status">Waiting for a log file</span></span><span id="window">Window: —</span><span id="source">Source: —</span></div>
+    <section id="dashboard" class="grid" aria-live="polite">
+      <div class="empty"><div><strong>Load your real JSONL logs</strong>Select <code>data/logs.jsonl</code> above, then capture the six live dashboard panels for evidence 11.</div></div>
+    </section>
+    <p class="note">Definitions: p95 is calculated from <code>response_sent.latency_ms</code>; cost, token, and quality totals use response records; error rate uses <code>request_failed / request_received</code>. The displayed 60-minute window ends at the newest log timestamp so recorded samples remain visible.</p>
+  </main>
+  <script>
+    const fileInput = document.querySelector('#logFile');
+    const reload = document.querySelector('#reload');
+    const thresholdInput = document.querySelector('#latencyThreshold');
+    let selectedFile;
+    const fmt = new Intl.NumberFormat('en-US', { maximumFractionDigits: 2 });
+    const sum = xs => xs.reduce((a, b) => a + b, 0);
+    const numeric = (row, key) => Number.isFinite(Number(row[key])) ? Number(row[key]) : null;
+    const percentile = (values, p) => { if (!values.length) return 0; const a=[...values].sort((x,y)=>x-y); const index=Math.max(0,Math.min(a.length-1,Math.round((p/100)*a.length+0.5)-1)); return a[index]; };
+    const money = n => '$' + (n < .01 ? n.toFixed(4) : n.toFixed(3));
+    const time = d => d.toLocaleTimeString([], { hour:'2-digit', minute:'2-digit', second:'2-digit' });
+    function spark(values, color) {
+      if (!values.length) return '<svg viewBox="0 0 480 62" preserveAspectRatio="none"><line x1="0" y1="52" x2="480" y2="52" stroke="#29404a"/></svg>';
+      const max=Math.max(...values), min=Math.min(...values), range=max-min || 1;
+      const points=values.map((v,i)=>`${(i/(Math.max(values.length-1,1))*480).toFixed(1)},${(53-(v-min)/range*42).toFixed(1)}`).join(' ');
+      return `<svg viewBox="0 0 480 62" preserveAspectRatio="none" aria-hidden="true"><line x1="0" y1="53" x2="480" y2="53" stroke="#29404a"/><polyline points="${points}" fill="none" stroke="${color}" stroke-width="2.5" vector-effect="non-scaling-stroke"/><circle cx="480" cy="${(53-(values.at(-1)-min)/range*42).toFixed(1)}" r="3.5" fill="${color}"/></svg>`;
+    }
+    function card(title, unit, value, suffix, note, values, color, state, threshold) {
+      const className=state==='good'?'good':state==='warn'?'warn':'';
+      return `<article class="panel ${title==='Response latency' || title==='Traffic' ? 'wide tall' : ''}"><div class="panel-head"><h2 class="panel-title">${title}</h2><span class="unit">${unit}</span></div><div class="value">${value} <small>${suffix || ''}</small></div><div class="metric-note">${note}</div><div class="chart">${spark(values,color)}</div><div class="footer-line"><span>${threshold}</span><span class="badge ${className}">${state==='warn'?'attention':'within SLO'}</span></div></article>`;
+    }
+    function render(rows, sourceName) {
+      const latencyThresholdMs = Math.max(1, Number(thresholdInput.value) || 3000);
+      const parsed = rows.filter(r => r && r.ts && !Number.isNaN(new Date(r.ts).valueOf())).sort((a,b)=>new Date(a.ts)-new Date(b.ts));
+      if (!parsed.length) return fail('No valid JSONL records with a ts field were found.');
+      const end = new Date(parsed.at(-1).ts), start = new Date(end - 60*60*1000);
+      const windowRows = parsed.filter(r => new Date(r.ts) >= start);
+      const requests = windowRows.filter(r => r.event === 'request_received');
+      const responses = windowRows.filter(r => r.event === 'response_sent');
+      const failures = windowRows.filter(r => r.event === 'request_failed');
+      const latencies = responses.map(r=>numeric(r,'latency_ms')).filter(n=>n!==null);
+      const costs = responses.map(r=>numeric(r,'cost_usd')).filter(n=>n!==null);
+      const tokens = responses.map(r=>(numeric(r,'tokens_in')||0)+(numeric(r,'tokens_out')||0));
+      const qualities = responses.map(r=>numeric(r,'quality_score')).filter(n=>n!==null);
+      const p95 = percentile(latencies,.95), errorRate = requests.length ? failures.length / requests.length * 100 : 0;
+      const toolRows = responses.filter(r => typeof r.tool_success === 'boolean');
+      const toolRate = toolRows.length ? toolRows.filter(r=>r.tool_success).length/toolRows.length*100 : null;
+      const bins = new Map();
+      for (const r of windowRows) { const d=new Date(r.ts); d.setSeconds(0,0); const k=d.toISOString(); if(!bins.has(k)) bins.set(k,{requests:0,errors:0,latency:[],cost:0,tokens:0,quality:[]}); const b=bins.get(k); if(r.event==='request_received') b.requests++; if(r.event==='request_failed') b.errors++; if(r.event==='response_sent') { const l=numeric(r,'latency_ms'); if(l!==null)b.latency.push(l); b.cost+=numeric(r,'cost_usd')||0; b.tokens+=(numeric(r,'tokens_in')||0)+(numeric(r,'tokens_out')||0); const q=numeric(r,'quality_score'); if(q!==null)b.quality.push(q); } }
+      const series=[...bins.values()];
+      const latencySeries=responses.map(r=>numeric(r,'latency_ms')).filter(n=>n!==null), trafficSeries=series.map(b=>b.requests), costSeries=series.map(b=>b.cost), tokenSeries=series.map(b=>b.tokens), qualitySeries=series.map(b=>b.quality.length?sum(b.quality)/b.quality.length:0);
+      document.querySelector('#status').textContent = `${parsed.length} valid records · ${responses.length} response events`;
+      document.querySelector('#statusDot').className='dot ok';
+      document.querySelector('#window').textContent=`Window: ${time(start)}–${time(end)} (latest log)`;
+      document.querySelector('#source').textContent=`Source: ${sourceName}`;
+      const totalCost=sum(costs), totalTokens=sum(tokens), avgQuality=qualities.length?sum(qualities)/qualities.length:0;
+      document.querySelector('#dashboard').innerHTML =
+        card('Response latency','milliseconds',Math.round(p95),'ms',`p95 across ${latencies.length} completed responses`,latencySeries,'#42c5ad',p95>latencyThresholdMs?'warn':'good',`Alert threshold: ${latencyThresholdMs} ms`)+
+        card('Traffic','requests / minute',fmt.format(requests.length),'req',`${responses.length} completed · ${failures.length} failed`,trafficSeries,'#78a9d7','good','Scope: received requests')+
+        card('Error rate','failed / received',errorRate.toFixed(1),'%',`${failures.length} failures out of ${requests.length} requests`,series.map(b=>b.requests?b.errors/b.requests*100:0),'#ee7667',errorRate>2?'warn':'good','Alert: > 2.0% for 5 min')+
+        card('LLM cost','USD',money(totalCost),'',`Aggregate response cost`,costSeries,'#e5a54b','good','Scope: response_sent.cost_usd')+
+        card('Token volume','input + output',fmt.format(totalTokens),'tokens',`${responses.length} response records`,tokenSeries,'#b094da','good','Scope: tokens_in + tokens_out')+
+        card('Answer quality','score / 1.0',avgQuality.toFixed(2),'',toolRate===null?`${qualities.length} scored responses`:`${toolRate.toFixed(0)}% retrieval success`,qualitySeries,'#42c5ad',avgQuality<.7?'warn':'good','Target: quality ≥ 0.70')+
+        `<section class="ledger" aria-label="Data summary"><div><span>Latest observed timestamp</span><b>${end.toISOString()}</b></div><div><span>Correlation IDs</span><b>${new Set(windowRows.map(r=>r.correlation_id).filter(Boolean)).size}</b></div><div><span>Models observed</span><b>${new Set(windowRows.map(r=>r.model).filter(Boolean)).size}</b></div><div><span>Privacy state</span><b>scrubbed logs</b></div></section>`;
+    }
+    function fail(message) { document.querySelector('#dashboard').innerHTML=`<div class="empty"><div><strong>Unable to build dashboard</strong>${message}</div></div>`; document.querySelector('#status').textContent='Load failed'; document.querySelector('#statusDot').className='dot'; }
+    async function load() { if (!selectedFile) return; try { const text=await selectedFile.text(); const rows=[]; text.split(/\r?\n/).filter(Boolean).forEach((line,i)=>{ try { rows.push(JSON.parse(line)); } catch { console.warn(`Ignored invalid JSON on line ${i+1}`); } }); render(rows, selectedFile.name); } catch { fail('The selected file could not be read.'); } }
+    fileInput.addEventListener('change', () => { selectedFile=fileInput.files[0]; reload.disabled=!selectedFile; load(); });
+    reload.addEventListener('click', load);
+    thresholdInput.addEventListener('change', load);
+  </script>
+</body>
+</html>

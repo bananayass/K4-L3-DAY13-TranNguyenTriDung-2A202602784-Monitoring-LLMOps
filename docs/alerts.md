@@ -1,60 +1,27 @@
-# Template Alert và Runbook
+# Alert và runbook
 
-Mỗi alert phải dựa trên triệu chứng người dùng hoặc SLO, không dựa trực tiếp vào tên implementation nội bộ.
+Các alert dựa trên triệu chứng người dùng thấy được. Khi điều tra, luôn đi theo Metrics → Logs → Traces, không đoán nguyên nhân từ tên incident.
 
-## Alert mẫu để tham khảo
+## HighLatencyP95
 
-Ví dụ dưới đây minh họa mức độ cụ thể cần có. Học viên không cần copy nguyên, nhưng ba alert trong bài nộp nên rõ ràng tương tự: điều kiện là gì, kéo dài bao lâu, ảnh hưởng tới user ra sao và người trực cần kiểm tra gì trước.
+- Severity: `warning`; duration: `5m`; channel: Slack `#k4-l3b-alerts`; owner: `student-2A202602784`.
+- Điều kiện: P95 của `response_sent.latency_ms` lớn hơn `3000ms` liên tục 5 phút.
+- Ảnh hưởng: người dùng chờ câu trả lời lâu.
+- Kiểm tra: (1) xác nhận P95/P99 và TTFT trên panel latency; (2) lấy `correlation_id` có latency cao trong `data/logs.jsonl`; (3) mở trace cùng ID và so sánh `retrieve-context` với `generate-response`.
+- Mitigation: tắt practice scenario gây chậm hoặc rollback prompt/config vừa đổi sau khi evidence xác nhận.
 
-- Tên: `HighLatencyP95`
-- Severity: `warning`
-- Duration: `5m`
-- Kênh thông báo: Slack `#k4-l3b-alerts`
-- SLI/SLO liên quan: latency P95 của `response_sent.latency_ms`
-- Điều kiện và thời gian duy trì: `p95(latency_ms) > 3000ms` trong 5 phút
-- Ảnh hưởng tới người dùng: người dùng phải chờ lâu hơn trước khi nhận câu trả lời
-- Ba bước kiểm tra đầu tiên:
-  1. Mở dashboard latency để xác nhận P95/P99 và khoảng thời gian tăng.
-  2. Lọc `data/logs.jsonl` trong khoảng đó, lấy một `correlation_id` có `latency_ms` cao.
-  3. Mở trace cùng `correlation_id` trên Langfuse, so sánh các span chính để xác định bước nào bất thường.
-- Mitigation tạm thời: dựa trên evidence thực tế để rollback prompt, khôi phục cấu hình liên quan, tắt practice scenario hoặc giảm tải khi demo.
-- Owner: `student-<MSSV>`
+## HighErrorRate
 
-## Alert 1
+- Severity: `critical`; duration: `5m`; channel: Slack `#k4-l3b-alerts`; owner: `student-2A202602784`.
+- Điều kiện: `request_failed / request_received` lớn hơn `2%` liên tục 5 phút.
+- Ảnh hưởng: người dùng không nhận được câu trả lời.
+- Kiểm tra: (1) xác nhận error rate theo thời gian; (2) lọc event `request_failed`, nhóm theo `error_type` và lấy correlation ID; (3) mở trace cùng ID để xác định retrieval hay generation lỗi.
+- Mitigation: tắt scenario lỗi, khôi phục dependency/config trước thay đổi, sau đó chạy một request kiểm chứng.
 
-- Tên:
-- Severity:
-- Duration:
-- Kênh thông báo: Slack
-- SLI/SLO liên quan:
-- Điều kiện và thời gian duy trì:
-- Ảnh hưởng tới người dùng:
-- Ba bước kiểm tra đầu tiên:
-- Mitigation tạm thời:
-- Owner:
+## LowRetrievalSuccess
 
-## Alert 2
-
-- Tên:
-- Severity:
-- Duration:
-- Kênh thông báo: Slack
-- SLI/SLO liên quan:
-- Điều kiện và thời gian duy trì:
-- Ảnh hưởng tới người dùng:
-- Ba bước kiểm tra đầu tiên:
-- Mitigation tạm thời:
-- Owner:
-
-## Alert 3
-
-- Tên:
-- Severity:
-- Duration:
-- Kênh thông báo: Slack
-- SLI/SLO liên quan:
-- Điều kiện và thời gian duy trì:
-- Ảnh hưởng tới người dùng:
-- Ba bước kiểm tra đầu tiên:
-- Mitigation tạm thời:
-- Owner:
+- Severity: `warning`; duration: `10m`; channel: Slack `#k4-l3b-alerts`; owner: `student-2A202602784`.
+- Điều kiện: tỷ lệ `tool_success=true` của retrieval nhỏ hơn `90%` liên tục 10 phút.
+- Ảnh hưởng: câu trả lời thiếu context hoặc request thất bại.
+- Kiểm tra: (1) xác nhận retrieval-success rate ở panel errors; (2) lọc log có `tool_name=retrieval` và `tool_success=false`; (3) so sánh `retrieve-context` của trace lỗi với trace thành công.
+- Mitigation: tắt scenario retrieval lỗi, kiểm tra vector-store/config corpus, rồi chạy workload lại.

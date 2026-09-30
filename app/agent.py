@@ -2,7 +2,10 @@ from __future__ import annotations
 
 import os
 import time
+from contextlib import nullcontext
 from dataclasses import dataclass
+from datetime import datetime, timedelta, timezone
+from typing import Any
 
 from . import metrics
 from .mock_llm import FakeLLM
@@ -51,13 +54,70 @@ class LabAgent:
             },
         ):
             started = time.perf_counter()
-            docs = retrieve(message)
+            # Explicit inputs make the trace readable while scrub_text prevents
+            # raw user PII from being sent to Langfuse.
+            langfuse_client.update_current_span(
+                input={"message_preview": summarize_text(message)},
+            )
+            with self._observation(
+                langfuse_client,
+                name="retrieve-context",
+                as_type="retriever",
+                input={"query_preview": summarize_text(message)},
+                metadata={"correlation_id": correlation_id, "feature": feature},
+            ) as retrieval:
+                docs = retrieve(message)
+                self._update_observation(
+                    retrieval,
+                    output={"document_count": len(docs)},
+                    metadata={"document_count": len(docs)},
+                )
+
             prompt = resolve_prompt(
                 langfuse_client,
                 feature=feature,
                 docs=docs,
                 message=message,
                 enabled=tracing_enabled(),
+            )
+            with propagate_attributes(prompt=prompt.managed_prompt):
+                with self._observation(
+                    langfuse_client,
+                    name="generate-response",
+                    as_type="generation",
+                    model=self.model,
+                    prompt=prompt.managed_prompt,
+                    input={"prompt_preview": summarize_text(prompt.text)},
+                    metadata={
+                        "correlation_id": correlation_id,
+                        "feature": feature,
+                        "prompt_name": prompt.name,
+                        "prompt_label": prompt.label,
+                        "prompt_version": prompt.version,
+                    },
+                ) as generation:
+                    generation_started_at = datetime.now(timezone.utc)
+                    response = self.llm.generate(prompt.text)
+                    cost_usd = self._estimate_cost(
+                        response.usage.input_tokens, response.usage.output_tokens
+                    )
+                    self._update_observation(
+                        generation,
+                        output={"answer_preview": summarize_text(response.text)},
+                        model=response.model,
+                        usage_details={
+                            "input": response.usage.input_tokens,
+                            "output": response.usage.output_tokens,
+                        },
+                        cost_details={"total": cost_usd},
+                        completion_start_time=generation_started_at
+                        + timedelta(milliseconds=response.ttft_ms),
+                    )
+
+            quality_score = self._heuristic_quality(message, response.text, docs)
+            latency_ms = int((time.perf_counter() - started) * 1000)
+            langfuse_client.update_current_span(
+                output={"answer_preview": summarize_text(response.text)},
             )
             langfuse_client.update_current_span(
                 metadata={
@@ -71,13 +131,6 @@ class LabAgent:
                 },
                 version=prompt.version,
             )
-            # TODO (CP2): instrument retrieve() and FakeLLM.generate() as child
-            # observations. The nested generation must receive prompt, usage and cost.
-            with propagate_attributes(prompt=prompt.managed_prompt):
-                response = self.llm.generate(prompt.text)
-            quality_score = self._heuristic_quality(message, response.text, docs)
-            latency_ms = int((time.perf_counter() - started) * 1000)
-            cost_usd = self._estimate_cost(response.usage.input_tokens, response.usage.output_tokens)
 
         metrics.record_request(
             latency_ms=latency_ms,
@@ -97,6 +150,18 @@ class LabAgent:
             cost_usd=cost_usd,
             quality_score=quality_score,
         )
+
+    @staticmethod
+    def _observation(client: Any, **kwargs: Any):
+        """Start a nested v4 observation, or no-op for lightweight test clients."""
+        start = getattr(client, "start_as_current_observation", None)
+        return start(**kwargs) if callable(start) else nullcontext(None)
+
+    @staticmethod
+    def _update_observation(observation: Any, **kwargs: Any) -> None:
+        update = getattr(observation, "update", None)
+        if callable(update):
+            update(**kwargs)
 
     def _estimate_cost(self, tokens_in: int, tokens_out: int) -> float:
         input_cost = (tokens_in / 1_000_000) * 3
