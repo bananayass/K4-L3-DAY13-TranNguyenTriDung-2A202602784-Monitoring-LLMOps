@@ -8,7 +8,7 @@
 - **MSSV:** 2A202602784
 - **Lớp:** K4-L3B
 - **Repository URL:** [K4-L3-DAY13-TranNguyenTriDung-2A202602784-Monitoring-LLMOps](https://github.com/bananayass/K4-L3-DAY13-TranNguyenTriDung-2A202602784-Monitoring-LLMOps)
-- **Commit SHA cuối:**
+- **Commit SHA cuối:** 09f9b7f573bc608fc2c5171262882da5593ea0b0
 - **Challenge ID:** `day13-k4-l3b-monitoring-llmops-v1` (K4).
 - **Tên project Langfuse cá nhân:** `day13-k4-l3b-2A202602784`
 
