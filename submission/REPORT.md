@@ -41,7 +41,7 @@ Checklist đối chiếu: [docs/grading-evidence.md](../docs/grading-evidence.md
 | `validate_logs.py` | Estimated Score: 30/100 (45 records) | 100/100 | Baseline lưu tại `../logs-cp0-baseline.jsonl`; không dùng lại khi chấm CP1. |
 | `validate_dashboard.py` | 6/6 panel | 6/6 panel | Contract validator đạt. |
 | `pytest` | 22 passed | 26 passed | Đã thêm test CCCD và thẻ, passport, address. |
-| Số traces hợp lệ | Chưa ghi | Ít nhất 17 đã đối chiếu | 12 trace đã ghi nhận ở CP2 và 5 trace challenge CP3; 10 trace baseline CP3 đã tạo nhưng cần đếm lại trên Langfuse để chốt tổng. |
+| Số traces hợp lệ | 20 (CP0) | Ít nhất 17 đã đối chiếu | Baseline có 20 request thành công và tracing bật; tính một trace mỗi request. Kết quả cuối gồm 12 trace CP2 đã ghi nhận, 5 trace challenge CP3 đã đối chiếu; 10 trace baseline CP3 đã tạo nhưng cần đếm lại trên Langfuse để chốt tổng. |
 | Số PII leak | 0 | 0 | Validator hiện tại phân tích 32 log records, phát hiện 0 PII leak. |
 | Latency P95 / TTFT P95 | 883 ms / 50 ms (20 responses, CP0) | 2665 ms / 52 ms (15 responses, CP3) | Theo percentile của `app.metrics`; CP3 gồm 10 baseline và 5 challenge. Challenge P95 vượt ngưỡng riêng 2000 ms nhưng dưới SLO chung 3000 ms. |
 | Retrieval success rate | 20/20 = 100% (CP0) | 15/15 = 100% (CP3) | Tính từ log có `tool_name=retrieval` và `tool_success` dạng boolean; năm request challenge vẫn retrieval thành công nhưng chậm. |
